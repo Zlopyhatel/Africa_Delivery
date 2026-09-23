@@ -1,0 +1,91 @@
+```@startuml
+skinparam backgroundcolor white
+skinparam handwritten false
+skinparam roundcorner 10
+skinparam DefaultFontName "Arial"
+
+title Диаграмма контейнеров (C4 Container Diagram) — Africa Delivery MVP (Финальная)
+
+' Определение внешних пользователей и каналов
+actor "Покупатель со смартфоном" as buyer_smart #DeepSkyBlue
+actor "Сельский покупатель" as buyer_rural #Orange
+actor "Продавец / Торговец" as merchant #Green
+
+' Внешние шлюзы (Входные каналы связи)
+rectangle "Шлюзы Мобильных Операторов\n(MTN / Safaricom USSD)" as telecom #LightGray
+rectangle "WhatsApp Business API\n(Meta канал)" as whatsapp_api #LightGreen
+
+' ЦЕНТРАЛЬНОЕ ПУБЛИЧНОЕ ОБЛАКО AWS (ЮАР) — Основной контур
+node "Регион AWS af-south-1 (Кейптаун, ЮАР)" #F5F5F5 {
+    
+    ' Единая точка входа для ВСЕГО трафика
+    rectangle "Входной шлюз API Gateway\n(Reverse Proxy / Rate Limiting / WAF)" as gateway #DarkCyan
+    
+    rectangle "Africa Delivery Core (Монолит на Go)" #LightGray {
+        ' Слой токенизации — единый фильтр для всех типов ПДн
+        rectangle "Модуль Токенизации ПДн\n(Data Residency Router)" as mod_token #Tomato
+        
+        ' Бизнес-логика (Оперирует ТОЛЬКО обезличенными UUID)
+        rectangle "Модуль Каталога & Витрины" as mod_catalog #DeepSkyBlue
+        rectangle "Модуль Корзины & Заказов" as mod_orders #DeepSkyBlue
+        rectangle "Модуль Расчетов & Платежей" as mod_payments #DeepSkyBlue
+        rectangle "Модуль Уведомлений" as mod_notifications #DeepSkyBlue
+        ' Выделенный независимый адаптер логистики
+        rectangle "Адаптер Логистики\n(Delivery Gateway Adapter)" as mod_delivery #CadetBlue
+    }
+    
+    database "Центральная СУБД (PostgreSQL)" #White {
+        rectangle "Схема Каталога" as schema_catalog #LightCyan
+        rectangle "Схема Заказов\n(Только UUID)" as schema_orders #LightCyan
+        rectangle "Схема Платежей\n(Только UUID)" as schema_payments #LightCyan
+        rectangle "Схема Уведомлений\n(Outbox Table)" as schema_notifications #LightCyan
+        ' Изолированная схема для фонового воркера доставки
+        rectangle "Схема Логистики\n(Outbox Delivery Tasks)" as schema_delivery #PaleTurquoise
+    }
+}
+
+' ЛОКАЛЬНЫЙ НАЦИОНАЛЬНЫЙ ЦОД (Объединенный контур комплаенса ПДн)
+node "Локальный национальный ЦОД\n(Внутри целевой страны: NG / KE / ZA)" #FFF5EE {
+    database "СУБД Локальных ПДн\n(PostgreSQL / Изолированные законы NDPR/KICA/POPIA)" as db_pdn_local #LightBlue
+}
+
+' Внешние партнеры (API)
+rectangle "Платежные Агрегаторы\n(Flutterwave / Paystack / M-Pesa)" as payment_gateways #Gold
+rectangle "Логистические Провайдеры\n(Sendbox / Sendy)" as logistics_partners #Orange
+
+' ---- НАПРАВЛЕНИЯ ТРАФИКА И ЗАЩИТА ПДН ----
+
+' 1. Входной поток: ВСЕ идут строго через API Gateway
+buyer_smart --> gateway : "HTTPS / REST (Запросы из приложения)"
+buyer_rural --> telecom : "GSM USSD Команды"
+telecom --> gateway : "HTTPS / Трансляция USSD сессий"
+merchant --> whatsapp_api : "Регистрация / SKU через чат-бот"
+whatsapp_api --> gateway : "HTTPS / Webhooks от Meta"
+
+' 2. Внутри монолита: Трафик первым делом падает в Модуль Токенизации
+gateway --> mod_token : "Первичная обработка входящего потока данных"
+
+' 3. Модуль токенизации распределяет ПДн по странам в локальный ЦОД (Data Residency Map)
+mod_token <--> db_pdn_local : "Регистрация / Поиск ПДн конкретной страны\n➔ Обмен на обезличенный UUID (HTTPS)"
+
+' 4. Очищенный поток с UUID передается в модули бизнес-логики
+mod_token --> mod_catalog : "Запросы к каталогу"
+mod_token --> mod_orders : "Оформление деперсонализированного заказа"
+
+' Внутреннее асинхронное взаимодействие заказа с логистическим адаптером
+mod_orders --> mod_delivery : "Запрос расчета тарифа / Инициирование накладной"
+
+' 5. Взаимодействие модулей со схемами БД (Database-per-Service)
+mod_catalog --> schema_catalog
+mod_orders --> schema_orders
+mod_payments --> schema_payments
+mod_notifications --> schema_notifications
+mod_delivery --> schema_delivery
+
+' 6. Интеграция с внешними BaaS/SaaS сервисами (Строго без утечки реальных имен)
+mod_payments --> payment_gateways : "Инициация оплат (API)"
+mod_delivery --> logistics_partners : "Передача заказов на доставку (API — Sendbox/Sendy)"
+mod_notifications --> whatsapp_api : "Триггеры сервисных сообщений (API)"
+mod_notifications --> telecom : "Отправка сервисных СМС (API)"
+
+```@enduml

@@ -1,0 +1,74 @@
+```@startuml
+
+skinparam backgroundcolor white
+skinparam handwritten false
+skinparam roundcorner 10
+skinparam DefaultFontName "Arial"
+
+title Диаграмма развертывания (Deployment Diagram) — Africa Delivery MVP
+
+' 1. ЗОНА ПОЛЬЗОВАТЕЛЕЙ И ОПЕРАТОРОВ (Внешний периметр)
+cloud "Внешние сети и каналы связи" #F5F5F5 {
+    rectangle "Смартфоны пользователей\n& Продавцы (WhatsApp)" as ext_users #LightBlue
+    rectangle "Базовые станции сотовой сети\n& USSD-центры (MTN / Safaricom)" as ext_telecom #LightGray
+}
+
+' 2. ЗОНА ЦЕНТРАЛЬНОГО ОБЛАКА AWS (ЮАР)
+node "Публичное облако AWS (Регион af-south-1, Кейптаун, ЮАР)" #E6F2FF {
+    
+    node "Виртуальный сервер вычислений\n[AWS EC2 Instance / Ubuntu Linux]" as ec2_core #White {
+        rectangle "Nginx\n(Reverse Proxy / API Gateway)" as nginx_gate #DarkCyan
+        rectangle "Africa Delivery Core\n[Go Binary / Монолит]" as go_app #DeepSkyBlue
+    }
+    
+    node "Управляемый сервис СУБД\n[AWS RDS Instance]" as rds_master #White {
+        database "PostgreSQL Master\n(Обезличенные транзакции)" as db_aws_master #Gold
+    }
+    
+    node "Облачное хранилище\n[AWS S3]" as aws_s3 #White {
+        artifact "Ежечасные бэкапы БД\n& Логи Grafana Loki" as backups_s3 #LightCyan
+    }
+    
+    node "Сервис управления ключами\n[AWS KMS]" as aws_kms #White {
+        control "Master Key (KEK)\n[Авторотация ключей]" as kms_keys #Tomato
+    }
+}
+
+' 3. ЗОНА ЛОКАЛЬНОГО НАЦИОНАЛЬНОГО ЦОД (Локальный периметр комплаенса)
+node "Локальный национальный ЦОД\n(Внутри целевой страны: Нигерия / Кения)" #FFF5EE {
+    
+    node "Локальный сервер базы данных\n[VPS / Bare-Metal Server]" as local_vps #White {
+        
+        rectangle "Сетевой экран (Firewall)\n[Вход строго по Белому списку IP из AWS]" as local_fw #OrangeRed
+        
+        node "Зашифрованный сектор диска\n[LUKS Volume / AES-256]" as luks_disk #LightGray {
+            database "Локальная СУБД PostgreSQL\n(Реальные ПДн и согласия)" as db_local_pdn #LightBlue
+        }
+    }
+}
+
+' ---- СЕТЕВЫЕ СОЕДИНЕНИЯ И ПРОТКОЛЫ БЕЗОПАСНОСТИ ----
+
+' Трафик мобильных приложений идет через открытый зашифрованный HTTPS
+ext_users ===> nginx_gate : " HTTPS (TLS 1.3)"
+
+' Трафик сотовых вышек USSD защищен выделенным туннелем на уровне провайдеров
+ext_telecom ===> nginx_gate : " IPSec VPN-туннель"
+
+' Связь внутри виртуальной машины AWS
+nginx_gate --> go_app : " Локальный сокет (HTTP)"
+
+' Связь монолита с центральной базой данных в рамках приватной сети AWS
+go_app --> db_aws_master : " TCP (Порт 5432)"
+
+' Автоматический managed-бэкап AWS RDS в S3
+rds_master .--> backups_s3 : " Авто-снапшоты"
+
+' ЗАЩИЩЕННЫЙ КРОСС-РЕГИОНАЛЬНЫЙ ТРАФИК (Ядро ЮАР <-> Локальный ЦОД)
+go_app ===> local_fw : " HTTPS / gRPC (Запрос UUID по токену)"
+local_fw --> db_local_pdn : " Перенаправление авторизованного запроса"
+
+' БЕЗОПАСНОСТЬ КЛЮЧЕЙ ШИФРОВАНИЯ (Забор ключа при старте сервера)
+local_vps .===> aws_kms : " HTTPS (Запрос временного ключа DEK\nв оперативную память при буте)"
+
+```@enduml
