@@ -1,0 +1,58 @@
+```@startuml
+
+skinparam backgroundcolor white
+skinparam handwritten false
+skinparam roundcorner 10
+skinparam DefaultFontName "Arial"
+skinparam rectangle {
+    BackgroundColor #F5F5F5
+    BorderColor #DarkCyan
+}
+
+title Диаграмма потока ценности (Value Stream) — Africa Delivery MVP
+
+' Основная цепочка создания ценности (Value Stream Stages)
+rectangle "Этап 1\nОнбординг и сбор согласий\n(Merchant/Buyer Opt-In)" as stage1 #LightGreen
+rectangle "Этап 2\nУправление каталогом\n(Catalog Management)" as stage2 #LightGreen
+rectangle "Этап 3\nОформление заказа\n(Order Capture)" as stage3 #LightGreen
+rectangle "Этап 4\nПроцессинг оплаты\n(Payment Processing)" as stage4 #LightGreen
+rectangle "Этап 5\nДоставка и трекинг\n(Order Fulfillment)" as stage5 #LightGreen
+rectangle "Этап 6\nКлиринг и выплаты\n(Merchant Settlement)" as stage6 #LightGreen
+
+' Связи между этапами потока ценности
+stage1 -right-> stage2
+stage2 -right-> stage3
+stage3 -right-> stage4
+stage4 -right-> stage5
+stage5 -right-> stage6
+
+' Привязка ИТ-возможностей (Capabilities) к этапам бизнеса
+rectangle "Обеспечивающие возможности (Capabilities / Services):" #White {
+    
+    ' К первому этапу привязываем WhatsApp, токенизатор и ЛОГИ СОГЛАСИЙ
+    card "• WhatsApp Business API\n• Модуль Токенизации ПДн\n• Контур сбора согласий (Consent & Opt-In Logs)" as cap1 #FFE4E1
+    cap1 ..> stage1
+    
+    ' Ко второму — каталог и схемы PostgreSQL
+    card "• Модуль Каталога\n• СУБД PostgreSQL (Схема каталога)" as cap2 #E6F2FF
+    cap2 ..> stage2
+    
+    ' К третьему — PWA, USSD-адаптер и токенизатор покупателей
+    card "• Легковесный PWA-интерфейс\n• USSD/SMS шлюзы операторов\n• Модуль Токенизации ПДн" as cap3 #FFE4E1
+    cap3 ..> stage3
+    
+    ' К четвертому — API Paystack и M-Pesa
+    card "• Интеграция Paystack API\n• Интеграция M-Pesa API\n• Выбор Наличных (COD)" as cap4 #FFFACD
+    cap4 ..> stage4
+    
+    ' К пятому — API Sendbox/Sendy и паттерн Outbox
+    card "• Интеграция Sendbox/Sendy API\n• Воркер Transactional Outbox\n• Фоллбэк-тариф ($5)" as cap5 #E6FFE6
+    cap5 ..> stage5
+    
+    ' К шестому — расчетный контур бэкенда
+    card "• Автоматический клиринг\n• Выплаты день-в-день через API" as cap6 #FFFACD
+    cap6 ..> stage6
+}
+
+
+```@enduml
