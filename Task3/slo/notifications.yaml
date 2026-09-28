@@ -1,0 +1,25 @@
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: notification-service-delivery
+  displayName: Успешность отправки уведомлений в партнерские шлюзы
+spec:
+  service: notification-service
+  description: Скорость и успешность сдачи пакетов (SMS/WhatsApp) в API агрегаторов сотовой связи.
+  budgetingMethod: Occurrences
+  objectives:
+    - ratioMetrics:
+        good:
+          metricSource:
+            metricSourceRef: prometheus
+          spec:
+            query: sum(rate(notification_outbox_delivery_total{status="delivered_to_gateway"}[1h]))
+        total:
+          metricSource:
+            metricSourceRef: prometheus
+          spec:
+            query: sum(rate(notification_outbox_delivery_total}[1h]))
+      target: 0.9950
+      timeWindow:
+        - duration: 30d
+          isRolling: true
