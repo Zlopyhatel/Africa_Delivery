@@ -1,0 +1,27 @@
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: catalog-service-availability
+  displayName: Наличие и доступность каталога товаров
+spec:
+  service: catalog-service
+  description: Контракт на доступность витрины каталога, защищенной CDN слоем.
+  budgetingMethod: Occurrences
+  objectives:
+    - ratioMetrics:
+        good:
+          metricSource:
+            metricSourceRef: prometheus
+          spec:
+            query: sum(rate(nginx_ingress_controller_requests{status=~"200|304|206", service="catalog"}[5m]))
+        total:
+          metricSource:
+            metricSourceRef: prometheus
+          spec:
+            query: sum(rate(nginx_ingress_controller_requests{service="catalog"}[5m]))
+      target: 0.9995
+      timeWindow:
+        - duration: 30d
+          isRolling: true
+  alertPolicies:
+    - alertPolicyRef: fast-burn-rate-alert
