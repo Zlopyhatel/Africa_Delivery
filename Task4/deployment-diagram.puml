@@ -1,0 +1,79 @@
+```@startuml
+
+skinparam backgroundcolor white
+skinparam handwritten false
+skinparam roundcorner 10
+skinparam DefaultFontName "Arial"
+
+title Диаграмма развертывания (Deployment Diagram) — Africa Delivery MVP (Схема Резервирования ПДн)
+
+' 1. ЗОНА ПОЛЬЗОВАТЕЛЕЙ И ОПЕРАТОРОВ (Внешний периметр)
+cloud "Внешние сети и каналы связи" #F5F5F5 {
+    rectangle "Смартфоны пользователей\n& Продавцы (WhatsApp)" as ext_users #LightBlue
+    rectangle "Базовые станции сотовой сети\n& USSD-центры (MTN / Safaricom)" as ext_telecom #LightGray
+}
+
+' 2. ЗОНА ЦЕНТРАЛЬНОГО ОБЛАКА AWS (ЮАР)
+node "Публичное облако AWS (Регион af-south-1, Кейптаун, ЮАР)" #E6F2FF {
+    
+    node "Виртуальный сервер вычислений\n[AWS EC2 Instance / Ubuntu Linux]" as ec2_core #White {
+        rectangle "Nginx\n(Reverse Proxy / API Gateway)" as nginx_gate #DarkCyan
+        rectangle "Africa Delivery Core\n[Go Binary / Монолит]" as go_app #DeepSkyBlue
+    }
+    
+    node "Управляемый сервис СУБД\n[AWS RDS Instance]" as rds_master #White {
+        database "PostgreSQL Master\n(Обезличенные транзакции)" as db_aws_master #Gold
+    }
+    
+    node "Облачное хранилище\n[AWS S3]" as aws_s3 #White {
+        artifact "Ежечасные бэкапы БД\n& Логи Grafana Loki" as backups_s3 #LightCyan
+    }
+    
+    node "Сервис управления ключами\n[AWS KMS]" as aws_kms #White {
+        control "Master Key (KEK)\n[Авторотация ключей]" as kms_keys #Tomato
+    }
+}
+
+' 3. ЗОНА ЛОКАЛЬНОГО НАЦИОНАЛЬНОГО ЦОД (Исправлено: Добавлено Primary/Replica резервирование)
+node "Локальный национальный ЦОД\n(Внутри целевой страны: Нигерия / Кения)" #FFF5EE {
+    
+    ' Основной сервер СУБД ПДн
+    node "Основной сервер СУБД\n[VPS / Primary Master]" as local_vps_master #White {
+        rectangle "Firewall Master\n[Только IP из AWS]" as local_fw_master #OrangeRed
+        node "Зашифрованный диск LUKS 1\n[AES-256]" as luks_disk_master #LightGray {
+            database "PostgreSQL Primary\n(Активные ПДн)" as db_local_pdn_master #LightBlue
+        }
+    }
+    
+    ' Резервный сервер СУБД ПДн (Замечание Дмитрия закрыто)
+    node "Резервный сервер СУБД\n[VPS / Replica Slave]" as local_vps_slave #White {
+        rectangle "Firewall Slave\n[Только IP из AWS]" as local_fw_slave #OrangeRed
+        node "Зашифрованный диск LUKS 2\n[AES-256]" as luks_disk_slave #LightGray {
+            database "PostgreSQL Replica\n(Резервные ПДн)" as db_local_pdn_slave #LightBlue
+        }
+    }
+}
+
+' ---- СЕТЕВЫЕ СОЕДИНЕНИЯ И ПРОТКОЛЫ БЕЗОПАСНОСТИ ----
+
+ext_users ===> nginx_gate : " HTTPS (TLS 1.3)"
+ext_telecom ===> nginx_gate : " IPSec VPN-туннель"
+nginx_gate --> go_app : " Локальный сокет (HTTP)"
+go_app --> db_aws_master : " TCP (Порт 5432)"
+rds_master .--> backups_s3 : " Авто-снапшоты"
+
+' Трафик монолита идет строго на Primary-сервер ПДн
+go_app ===> local_fw_master : " HTTPS / gRPC (Запрос UUID)"
+local_fw_master --> db_local_pdn_master
+
+' Внутренняя асинхронная репликация ПДн внутри ЦОДа между стойками
+db_local_pdn_master ===> db_local_pdn_slave : " Асинхронная репликация\nPostgreSQL Streaming (RPO~0)"
+
+' Резервный маршрут монолита на случай падения Мастера (План Б)
+go_app ...> local_fw_slave : " [Переключение при аварии / RTO < 30с]"
+
+' Оба сервера забирают ключи шифрования из единого облачного сейфа AWS KMS
+local_vps_master .===> aws_kms : " HTTPS (Запрос ключа DEK)"
+local_vps_slave .===> aws_kms : " HTTPS (Запрос ключа DEK)"
+
+```@enduml

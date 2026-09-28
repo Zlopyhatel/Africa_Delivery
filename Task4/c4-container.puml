@@ -1,0 +1,85 @@
+```@startuml
+
+skinparam backgroundcolor white
+skinparam handwritten false
+skinparam roundcorner 10
+skinparam DefaultFontName "Arial"
+
+title Диаграмма контейнеров (C4 Container Diagram) — Africa Delivery MVP
+
+' Определение внешних пользователей и каналов
+actor "Покупатель со смартфоном" as buyer_smart #DeepSkyBlue
+actor "Сельский покупатель" as buyer_rural #Orange
+actor "Продавец / Торговец" as merchant #Green
+
+' Внешние шлюзы (Входные каналы связи)
+rectangle "Шлюзы Мобильных Операторов\n(MTN / Safaricom USSD)" as telecom #LightGray
+rectangle "WhatsApp Business API\n(Meta канал)" as whatsapp_api #LightGreen
+
+' ЦЕНТРАЛЬНОЕ ПУБЛИЧНОЕ ОБЛАКО AWS (ЮАР) — Основной контур
+node "Регион AWS af-south-1 (Кейптаун, ЮАР)" #F5F5F5 {
+    
+    rectangle "Входной шлюз API Gateway\n(Reverse Proxy / Rate Limiting / WAF)" as gateway #DarkCyan
+    
+    rectangle "Africa Delivery Core (Монолит на Go)" #LightGray {
+        rectangle "Модуль Токенизации ПДн\n(Data Residency Router)" as mod_token #Tomato
+        rectangle "Модуль Каталога & Витрины" as mod_catalog #DeepSkyBlue
+        rectangle "Модуль Корзины & Заказов" as mod_orders #DeepSkyBlue
+        rectangle "Модуль Расчетов & Платежей" as mod_payments #DeepSkyBlue
+        rectangle "Модуль Уведомлений" as mod_notifications #DeepSkyBlue
+        rectangle "Адаптер Логистики\n(Delivery Gateway Adapter)" as mod_delivery #CadetBlue
+        
+        ' Классический синтаксис цвета для старых версий
+        rectangle "Модуль Интерактивных Стримов\n[ЗАМОРОЖЕНО ДО ФАЗЫ 2 / 6 МЕС]" as mod_stream #LightGray
+    }
+    
+    database "Центральная СУБД (PostgreSQL)" #White {
+        rectangle "Схема Каталога" as schema_catalog #LightCyan
+        rectangle "Схема Заказов\n(Только UUID)" as schema_orders #LightCyan
+        rectangle "Схема Платежей\n(Только UUID)" as schema_payments #LightCyan
+        rectangle "Схема Уведомлений\n(Outbox Table)" as schema_notifications #LightCyan
+        rectangle "Схема Логистики\n(Outbox Delivery Tasks)" as schema_delivery #PaleTurquoise
+    }
+}
+
+' ЛОКАЛЬНЫЙ НАЦИОНАЛЬНЫЙ ЦОД
+node "Локальный национальный ЦОД\n(Внутри целевой страны: NG / KE / ZA)" #FFF5EE {
+    database "СУБД Локальных ПДн\n(PostgreSQL / Изолированные законы NDPR/KICA/POPIA)" as db_pdn_local #LightBlue
+}
+
+' Внешние партнеры (API)
+rectangle "Платежные Агрегаторы\n(Flutterwave / Paystack / M-Pesa)" as payment_gateways #Gold
+rectangle "Логистические Провайдеры\n(Sendbox / Sendy)" as logistics_partners #Orange
+' Убрали двоеточия и кавычки из цвета
+rectangle "Плеер YouTube\n[ПОДКЛЮЧЕНИЕ НА ФАЗЕ 2]" as youtube_api #LightGray
+
+' ---- НАПРАВЛЕНИЯ ТРАФИКА И ЗАЩИТА ПДН ----
+buyer_smart --> gateway : "HTTPS / REST"
+buyer_rural --> telecom : "GSM USSD Команды"
+telecom --> gateway : "HTTPS / Трансляция USSD"
+merchant --> whatsapp_api : "Регистрация через чат-бот"
+whatsapp_api --> gateway : "HTTPS / Webhooks"
+
+gateway --> mod_token : "Первичная обработка"
+mod_token <--> db_pdn_local : "Токенизация ПДн"
+
+mod_token --> mod_catalog : "Запросы к каталогу"
+mod_token --> mod_orders : "Оформление заказа"
+
+mod_orders --> mod_delivery : "Запрос тарифа"
+mod_catalog --> schema_catalog
+mod_orders --> schema_orders
+mod_payments --> schema_payments
+mod_notifications --> schema_notifications
+mod_delivery --> schema_delivery
+
+' Изменили стрелку на пунктирную — этого достаточно, чтобы визуально показать будущую связь
+gateway ..> mod_stream : "[В будущем на Фазе 2]"
+mod_stream ..> youtube_api : "[В будущем на Фазе 2]"
+
+mod_payments --> payment_gateways : "Инициация оплат"
+mod_delivery --> logistics_partners : "Передача в Sendbox"
+mod_notifications --> whatsapp_api : "Триггеры сообщений"
+mod_notifications --> telecom : "Отправка СМС"
+
+```@enduml

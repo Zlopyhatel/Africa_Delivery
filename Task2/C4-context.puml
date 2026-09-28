@@ -1,0 +1,44 @@
+```@startuml
+skinparam backgroundcolor white
+skinparam handwritten false
+skinparam roundcorner 15
+skinparam DefaultFontName "Arial"
+skinparam sequenceMessageAlign center
+
+title Диаграмма контекста системы (C4 Context) — Africa Delivery MVP
+
+' Определение ролей (Акторов)
+actor "Покупатель (Смартфон)" as buyer_mobile #E6F2FF
+actor "Покупатель (Кнопочный телефон)" as buyer_ussd #FFE4E1
+actor "Продавец / Торговец" as merchant #E6FFE6
+
+' Граница нашей системы
+rectangle "Контур Africa Delivery (Модульный Монолит)" #F9F9F9 {
+    rectangle "Africa Delivery Core\n(Go / PostgreSQL)" as app_system #DeepSkyBlue
+    database "Локальные контуры ПДн\n(Нигерия / Кения)" as local_pdn #LightBlue
+}
+
+' Внешние системы и API (Buy-стратегия)
+rectangle "Шлюзы Мобильных Операторов\n(MTN / Safaricom)" as telecom #LightGray
+rectangle "WhatsApp Business API\n(Meta канал)" as whatsapp_api #LightGreen
+rectangle "Платежные Агрегаторы\n(Flutterwave / Paystack / M-Pesa)" as payment_gateways #Gold
+rectangle "Логистические Провайдеры\n(Sendbox / Sendy)" as logistics_partners #Orange
+rectangle "Стриминговая платформа\n(YouTube / Twitch)" as stream_platform #LightPink
+
+' Связи пользователей с ядром и шлюзами
+buyer_mobile --> app_system : "Выбирает товары, оплачивает,\nтрекает доставку (HTTPS)"
+buyer_ussd --> telecom : "Отправляет USSD-команды,\nоформляет текстовый заказ"
+telecom --> app_system : "Транслирует USSD/SMS команды\nв API системы (HTTPS/SMPP)"
+merchant --> app_system : "Загружает SKU, проверяет баланс,\nзапрашивает выплату"
+merchant --> whatsapp_api : "Проходит упрощенный онбординг\nбез веб-форм"
+
+' Внутренние связи архитектуры (ИБ комплаенс)
+app_system <--> local_pdn : "Маскирует ПДн согласно NDPR/KICA\n(Обмен Реальные данные <-> UUID Токен)"
+
+' Взаимодействие монолита с внешним миром (Аренда BaaS/SaaS)
+app_system --> payment_gateways : "Проводит онлайн-оплату\nи выплаты день-в-день (API)"
+app_system --> logistics_partners : "Передает заказы на доставку,\nзапрашивает статусы (API)"
+app_system --> whatsapp_api : "Интегрирует чаты и отправляет\nсервисные уведомления (API)"
+buyer_mobile --> stream_platform : "Смотрит live-стримы от блогеров\nчерез встроенный плеер (CDN)"
+
+```@enduml

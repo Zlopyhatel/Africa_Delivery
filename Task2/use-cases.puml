@@ -1,0 +1,76 @@
+```@startuml
+
+skinparam backgroundcolor white
+skinparam handwritten false
+skinparam roundcorner 10
+skinparam DefaultFontName "Arial"
+skinparam usecase {
+    BackgroundColor #E6F2FF
+    BorderColor #DeepSkyBlue
+    ArrowColor #DeepSkyBlue
+}
+
+title Диаграмма прецедентов (Use Case Diagram) — Africa Delivery MVP
+
+' Определение акторов
+actor "Покупатель со смартфоном" as buyer_smart #DeepSkyBlue
+actor "Сельский покупатель" as buyer_rural #Orange
+actor "Продавец / Торговец" as merchant #Green
+
+rectangle "Система Africa Delivery (MVP Контур)" #F5F5F5 {
+    
+    ' Канал 1: Мобильное приложение (Онлайн)
+    rectangle "Интерфейс приложения (Визуальный контур)" #White {
+        usecase "Просмотр карточек товаров\nи медиа-контента" as UC_browse_rich
+        usecase "Просмотр live-стримов\nот блогеров" as UC_view_streams
+        usecase "Онлайн-оплата картой\n(Paystack/Flutterwave)" as UC_pay_card
+    }
+    
+    ' Канал 2: Текстовый шлюз (Офлайн)
+    rectangle "Интерфейс USSD / SMS (Текстовый контур)" #White {
+        usecase "Навигация по текстовому\nменю каталога" as UC_ussd_menu
+    }
+    
+    ' Общее транзакционное ядро бэкенда
+    rectangle "Общие бизнес-процессы ядра (Бэкэнд)" #FFE4E1 {
+        usecase "Создание и оформление заказа" as UC_create_order
+        usecase "Запрос статуса\nи ETA доставки" as UC_track_order
+        usecase "Оформление возврата товара" as UC_init_refund
+        usecase "Оплата с мобильного счета\n(M-Pesa / Mobile Money)" as UC_pay_mobile_money
+        usecase "Выбор оплаты наличными\nпри получении (COD)" as UC_pay_cod
+    }
+    
+    ' Блок Продавца
+    rectangle "Модуль Продавца" #White {
+        usecase "Упрощенный онбординг\nчерез WhatsApp-бот" as UC_merchant_reg
+        usecase "Управление товарами\nи остатками (SKU)" as UC_manage_goods
+        usecase "Просмотр аналитики продаж\nи баланса в кабинете" as UC_merchant_dash
+    }
+}
+
+' Связи покупателя со смартфоном (Доступно всё)
+buyer_smart --> UC_browse_rich
+buyer_smart --> UC_view_streams
+buyer_smart --> UC_create_order
+buyer_smart --> UC_track_order
+buyer_smart --> UC_init_refund
+
+' Связи покупателя со смартфона со специфичными онлайн-платежами
+UC_create_order ..> UC_pay_card : <<extend>> (Только приложение)
+
+' Связи сельского покупателя (Только текст)
+buyer_rural --> UC_ussd_menu
+buyer_rural --> UC_create_order
+buyer_rural --> UC_track_order
+buyer_rural --> UC_init_refund
+
+' Сквозные способы оплаты (Доступны обоим каналам)
+UC_create_order ..> UC_pay_mobile_money : <<extend>>
+UC_create_order ..> UC_pay_cod : <<extend>>
+
+' Связи продавца
+merchant --> UC_merchant_reg
+merchant --> UC_manage_goods
+merchant --> UC_merchant_dash
+
+```@enduml
